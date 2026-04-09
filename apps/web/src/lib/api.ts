@@ -90,3 +90,47 @@ export async function toggleProspectStatus(id: string) {
     token: getToken()!,
   });
 }
+
+// Planning
+export async function getPlans(params: { userId?: string; year?: number; weekNumber?: number } = {}) {
+  const q = new URLSearchParams();
+  if (params.userId) q.set("userId", params.userId);
+  if (params.year) q.set("year", String(params.year));
+  if (params.weekNumber) q.set("weekNumber", String(params.weekNumber));
+  return api(`/planning?${q.toString()}`, { token: getToken()! });
+}
+
+export async function getPlan(id: string) {
+  return api(`/planning/${id}`, { token: getToken()! });
+}
+
+export async function createPlan(data: { userId: string; year: number; weekNumber: number; items: { prospectId: string; dayOfWeek: number; visitOrder: number }[] }) {
+  return api("/planning", {
+    method: "POST",
+    token: getToken()!,
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updatePlan(id: string, data: { status?: string; items?: { prospectId: string; dayOfWeek: number; visitOrder: number }[] }) {
+  return api(`/planning/${id}`, {
+    method: "PATCH",
+    token: getToken()!,
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deletePlan(id: string) {
+  return api(`/planning/${id}`, {
+    method: "DELETE",
+    token: getToken()!,
+  });
+}
+
+export async function getCurrentWeek() {
+  return api("/planning/current-week", { token: getToken()! });
+}
+
+export async function getUnassignedProspects() {
+  return api("/prospects/unassigned", { token: getToken()! });
+}
