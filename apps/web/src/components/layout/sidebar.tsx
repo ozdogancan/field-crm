@@ -10,6 +10,7 @@ import {
   Building2,
   CalendarDays,
   ClipboardList,
+  BarChart3,
   Settings,
   LogOut,
 } from "lucide-react";
@@ -20,6 +21,7 @@ const navItems = [
   { href: "/prospects", label: "Müşteriler", icon: Building2 },
   { href: "/planning", label: "Haftalık Plan", icon: CalendarDays },
   { href: "/visits", label: "Ziyaret Logları", icon: ClipboardList },
+  { href: "/reports", label: "Raporlar", icon: BarChart3 },
   { href: "/users", label: "Kullanıcılar", icon: Users },
   { href: "/settings", label: "Ayarlar", icon: Settings },
 ];

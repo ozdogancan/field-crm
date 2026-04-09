@@ -179,3 +179,34 @@ export async function getVisit(id: string) {
 export async function getTodayStats() {
   return api("/visits/today-stats", { token: getToken()! });
 }
+
+// Reports
+export async function getDashboardStats() {
+  return api("/reports/dashboard", { token: getToken()! });
+}
+
+export async function getUserPerformance(params: { startDate?: string; endDate?: string } = {}) {
+  const q = new URLSearchParams();
+  if (params.startDate) q.set("startDate", params.startDate);
+  if (params.endDate) q.set("endDate", params.endDate);
+  return api(`/reports/user-performance?${q.toString()}`, { token: getToken()! });
+}
+
+export async function getWeeklyTrend(weeksBack = 8) {
+  return api(`/reports/weekly-trend?weeksBack=${weeksBack}`, { token: getToken()! });
+}
+
+export async function getDailySummary(date?: string) {
+  const q = date ? `?date=${date}` : "";
+  return api(`/reports/daily-summary${q}`, { token: getToken()! });
+}
+
+// Email
+export async function triggerDailySummary(date?: string) {
+  const q = date ? `?date=${date}` : "";
+  return api(`/email/trigger-summary${q}`, { method: "POST", token: getToken()! });
+}
+
+export async function getEmailLogs(page = 1, limit = 20) {
+  return api(`/email/logs?page=${page}&limit=${limit}`, { token: getToken()! });
+}
