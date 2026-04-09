@@ -28,6 +28,10 @@ export default function LoginScreen() {
       setError('Email ve şifre gereklidir');
       return;
     }
+    if (!email.includes('@')) {
+      setError('Geçerli bir email adresi girin');
+      return;
+    }
     setError('');
     setLoading(true);
     const result = await login(email, password);

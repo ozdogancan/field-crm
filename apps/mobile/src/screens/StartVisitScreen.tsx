@@ -6,7 +6,7 @@ import {
   Text,
 } from 'react-native';
 import * as Location from 'expo-location';
-import { startVisit } from '../lib/api';
+import { getProspect, startVisit } from '../lib/api';
 import ActionButton from '../components/ui/ActionButton';
 import InfoRow from '../components/ui/InfoRow';
 import InlineAlert from '../components/ui/InlineAlert';
@@ -15,6 +15,7 @@ import SectionHeader from '../components/ui/SectionHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import SurfaceCard from '../components/ui/SurfaceCard';
 import { useToast } from '../context/ToastContext';
+import { formatDistance, haversineDistanceMeters } from '../lib/geo';
 import { theme } from '../theme';
 
 export default function StartVisitScreen({ route, navigation }: any) {
@@ -24,26 +25,54 @@ export default function StartVisitScreen({ route, navigation }: any) {
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
   const [error, setError] = useState('');
+  const [distanceLabel, setDistanceLabel] = useState('');
+  const [distanceState, setDistanceState] = useState<'unknown' | 'near' | 'far'>('unknown');
+
+  const loadLocation = async () => {
+    setLoading(true);
+    setError('');
+
+    const { status } = await Location.requestForegroundPermissionsAsync();
+    if (status !== 'granted') {
+      setError('Konum izni gereklidir. Ayarlardan izin verin.');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const loc = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+      setLocation(loc);
+
+      if (prospectId) {
+        const prospectRes = await getProspect(prospectId);
+        const prospect = prospectRes.success ? (prospectRes.data as any) : null;
+        const latitude = Number(prospect?.latitude);
+        const longitude = Number(prospect?.longitude);
+
+        if (!Number.isNaN(latitude) && !Number.isNaN(longitude)) {
+          const distance = haversineDistanceMeters(
+            loc.coords.latitude,
+            loc.coords.longitude,
+            latitude,
+            longitude,
+          );
+          setDistanceLabel(formatDistance(distance));
+          setDistanceState(distance <= 200 ? 'near' : 'far');
+        } else {
+          setDistanceLabel('Koordinat bilgisi yok');
+          setDistanceState('unknown');
+        }
+      }
+    } catch (err) {
+      setError('Konum alınamadı. GPS açık olduğundan emin olun.');
+    }
+    setLoading(false);
+  };
 
   useEffect(() => {
-    (async () => {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setError('Konum izni gereklidir. Ayarlardan izin verin.');
-        setLoading(false);
-        return;
-      }
-
-      try {
-        const loc = await Location.getCurrentPositionAsync({
-          accuracy: Location.Accuracy.High,
-        });
-        setLocation(loc);
-      } catch (err) {
-        setError('Konum alınamadı. GPS açık olduğundan emin olun.');
-      }
-      setLoading(false);
-    })();
+    loadLocation();
   }, []);
 
   const handleStart = async () => {
@@ -98,7 +127,16 @@ export default function StartVisitScreen({ route, navigation }: any) {
             {loading ? (
               <StatusBadge label="Konum alınıyor" tone="warning" />
             ) : location ? (
-              <StatusBadge label="Konum hazır" tone="success" />
+              <StatusBadge
+                label={
+                  distanceState === 'near'
+                    ? 'Konum uygun'
+                    : distanceState === 'far'
+                      ? 'Uzak konum'
+                      : 'Konum hazır'
+                }
+                tone={distanceState === 'far' ? 'warning' : 'success'}
+              />
             ) : (
               <StatusBadge label="Konum yok" tone="danger" />
             )}
@@ -112,8 +150,16 @@ export default function StartVisitScreen({ route, navigation }: any) {
                 : 'Konum alınamadı'}
           </Text>
 
+          {distanceLabel ? (
+            <Text style={styles.distanceText}>
+              Müşteriye uzaklık: {distanceLabel}
+            </Text>
+          ) : null}
+
           <Text style={styles.locationHint}>
-            Ziyaret başlatmak için müşteri noktasına yakın olmanız gerekir. Dış mekanda GPS doğruluğunu kontrol edin.
+            {distanceState === 'far'
+              ? 'Müşteriye henüz yeterince yakın değilsiniz. Yaklaşınca tekrar deneyin.'
+              : 'Ziyaret başlatmak için müşteri noktasına yakın olmanız gerekir. Dış mekanda GPS doğruluğunu kontrol edin.'}
           </Text>
         </View>
 
@@ -134,6 +180,7 @@ export default function StartVisitScreen({ route, navigation }: any) {
             disabled={!location}
             loading={starting}
           />
+          <ActionButton label="Konumu Yenile" onPress={loadLocation} variant="secondary" disabled={starting} />
           <ActionButton label="Geri Dön" onPress={() => navigation.goBack()} variant="secondary" />
         </View>
       </SurfaceCard>
@@ -176,6 +223,11 @@ const styles = StyleSheet.create({
     fontSize: theme.typography.bodySm,
     lineHeight: 20,
     color: theme.colors.textMuted,
+  },
+  distanceText: {
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.text,
   },
   actions: {
     gap: theme.spacing.md,

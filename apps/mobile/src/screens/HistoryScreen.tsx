@@ -10,13 +10,14 @@ import {
 import { useFocusEffect } from '@react-navigation/native';
 import AppHeader from '../components/ui/AppHeader';
 import ActiveVisitBanner from '../components/ui/ActiveVisitBanner';
+import DataStatusBanner from '../components/ui/DataStatusBanner';
 import EmptyState from '../components/ui/EmptyState';
-import InlineAlert from '../components/ui/InlineAlert';
 import RouteListSkeleton from '../components/ui/RouteListSkeleton';
 import ScreenContainer from '../components/ui/ScreenContainer';
 import SectionHeader from '../components/ui/SectionHeader';
 import StatusBadge from '../components/ui/StatusBadge';
 import SurfaceCard from '../components/ui/SurfaceCard';
+import { readCache, writeCache } from '../lib/cache';
 import { theme } from '../theme';
 import { getMyVisitHistory } from '../lib/api';
 
@@ -41,11 +42,14 @@ const filters = [
 ] as const;
 
 export default function HistoryScreen() {
+  const HISTORY_CACHE_KEY = 'mobile_visit_history';
   const [items, setItems] = useState<VisitHistoryItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [selectedFilter, setSelectedFilter] = useState<(typeof filters)[number]['key']>('all');
+  const [isShowingCachedData, setIsShowingCachedData] = useState(false);
 
   const loadHistory = useCallback(async (filter = selectedFilter) => {
     try {
@@ -56,16 +60,36 @@ export default function HistoryScreen() {
       });
 
       if (res.success && res.data) {
-        setItems(res.data as VisitHistoryItem[]);
+        const nextItems = res.data as VisitHistoryItem[];
+        const updatedAt = new Date().toISOString();
+        setItems(nextItems);
+        setLastUpdatedAt(updatedAt);
+        setIsShowingCachedData(false);
+        await writeCache(`${HISTORY_CACHE_KEY}:${filter}`, {
+          items: nextItems,
+          lastUpdatedAt: updatedAt,
+        });
       } else {
         setItems([]);
         setErrorMessage(res.error?.message || res.message || 'Geçmiş ziyaretler yüklenemedi.');
+        const cached = await readCache<{ items: VisitHistoryItem[]; lastUpdatedAt: string }>(`${HISTORY_CACHE_KEY}:${filter}`);
+        if (cached) {
+          setItems(cached.items);
+          setLastUpdatedAt(cached.lastUpdatedAt);
+          setIsShowingCachedData(true);
+        }
       }
     } catch (error) {
       setErrorMessage('Geçmiş ziyaretler yüklenemedi.');
+      const cached = await readCache<{ items: VisitHistoryItem[]; lastUpdatedAt: string }>(`${HISTORY_CACHE_KEY}:${filter}`);
+      if (cached) {
+        setItems(cached.items);
+        setLastUpdatedAt(cached.lastUpdatedAt);
+        setIsShowingCachedData(true);
+      }
     }
     setLoading(false);
-  }, [selectedFilter]);
+  }, [HISTORY_CACHE_KEY, selectedFilter]);
 
   useFocusEffect(
     useCallback(() => {
@@ -156,17 +180,34 @@ export default function HistoryScreen() {
         </View>
 
         {errorMessage ? (
-          <InlineAlert
+          <DataStatusBanner
             title="Geçmiş verisi alınamadı"
-            message={errorMessage}
+            description={errorMessage}
             tone="warning"
+            lastUpdatedAt={lastUpdatedAt}
+            actionLabel="Tekrar Dene"
+            onAction={() => {
+              setLoading(true);
+              loadHistory(selectedFilter);
+            }}
           />
         ) : null}
 
         {refreshing ? (
-          <InlineAlert
-            message="Geçmiş ziyaret listesi yenileniyor."
+          <DataStatusBanner
+            title="Geçmiş yenileniyor"
+            description="Ziyaret listesi güncelleniyor."
             tone="info"
+            lastUpdatedAt={lastUpdatedAt}
+          />
+        ) : null}
+
+        {isShowingCachedData ? (
+          <DataStatusBanner
+            title="Kaydedilen geçmiş gösteriliyor"
+            description="Ağ erişimi olmadığı için cihazdaki son başarılı geçmiş listesi kullanılıyor."
+            tone="info"
+            lastUpdatedAt={lastUpdatedAt}
           />
         ) : null}
 

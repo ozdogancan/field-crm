@@ -32,6 +32,17 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
   const [startTime] = useState(Date.now());
   const [errorMessage, setErrorMessage] = useState('');
   const [resultValidation, setResultValidation] = useState('');
+  const [gpsState, setGpsState] = useState<'checking' | 'ready' | 'error'>('checking');
+
+  const checkGps = async () => {
+    setGpsState('checking');
+    try {
+      await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+      setGpsState('ready');
+    } catch {
+      setGpsState('error');
+    }
+  };
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -39,6 +50,10 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
     }, 1000);
     return () => clearInterval(timer);
   }, [startTime]);
+
+  useEffect(() => {
+    checkGps();
+  }, []);
 
   const formatElapsed = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -54,33 +69,46 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
       return;
     }
 
-    setSubmitting(true);
-    setErrorMessage('');
-    setResultValidation('');
-    try {
-      const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-      const res = await endVisit(visitId, {
-        result: selectedResult,
-        resultNotes: notes || undefined,
-        latitude: loc.coords.latitude,
-        longitude: loc.coords.longitude,
-      });
+    Alert.alert(
+      'Ziyareti sonlandır',
+      'Ziyareti sonlandırıp günlük plana dönmek istediğinize emin misiniz?',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'Sonlandır',
+          onPress: async () => {
+            setSubmitting(true);
+            setErrorMessage('');
+            setResultValidation('');
+            try {
+              const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+              const res = await endVisit(visitId, {
+                result: selectedResult,
+                resultNotes: notes || undefined,
+                latitude: loc.coords.latitude,
+                longitude: loc.coords.longitude,
+              });
 
-      if (res.success) {
-        showToast('Ziyaret kaydedildi ve günlük plana geri dönüldü.', {
-          title: 'Başarılı',
-          tone: 'success',
-        });
-        Alert.alert('Başarılı', 'Ziyaret sonlandırıldı', [
-          { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
-        ]);
-      } else {
-        setErrorMessage(res.error?.message || res.message || 'Ziyaret sonlandırılamadı');
-      }
-    } catch (err) {
-      setErrorMessage('Konum alınamadı');
-    }
-    setSubmitting(false);
+              if (res.success) {
+                showToast('Ziyaret kaydedildi ve günlük plana geri dönüldü.', {
+                  title: 'Başarılı',
+                  tone: 'success',
+                });
+                Alert.alert('Başarılı', 'Ziyaret sonlandırıldı', [
+                  { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
+                ]);
+              } else {
+                setErrorMessage(res.error?.message || res.message || 'Ziyaret sonlandırılamadı');
+              }
+            } catch (err) {
+              setErrorMessage('Konum alınamadı');
+            }
+            setSubmitting(false);
+            checkGps();
+          },
+        },
+      ],
+    );
   };
 
   const handleCancel = async () => {
@@ -89,21 +117,34 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
       return;
     }
 
-    setSubmitting(true);
-    setErrorMessage('');
-    const res = await cancelVisit(visitId, { cancelReason: cancelReason.trim() });
-    if (res.success) {
-      showToast('Ziyaret iptal olarak kaydedildi.', {
-        title: 'Ziyaret iptal edildi',
-        tone: 'warning',
-      });
-      Alert.alert('Bilgi', 'Ziyaret iptal edildi', [
-        { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
-      ]);
-    } else {
-      setErrorMessage(res.error?.message || res.message || 'İptal edilemedi');
-    }
-    setSubmitting(false);
+    Alert.alert(
+      'Ziyareti iptal et',
+      'Bu ziyareti iptal olarak kaydetmek istediğinize emin misiniz?',
+      [
+        { text: 'Vazgeç', style: 'cancel' },
+        {
+          text: 'İptal Et',
+          style: 'destructive',
+          onPress: async () => {
+            setSubmitting(true);
+            setErrorMessage('');
+            const res = await cancelVisit(visitId, { cancelReason: cancelReason.trim() });
+            if (res.success) {
+              showToast('Ziyaret iptal olarak kaydedildi.', {
+                title: 'Ziyaret iptal edildi',
+                tone: 'warning',
+              });
+              Alert.alert('Bilgi', 'Ziyaret iptal edildi', [
+                { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
+              ]);
+            } else {
+              setErrorMessage(res.error?.message || res.message || 'İptal edilemedi');
+            }
+            setSubmitting(false);
+          },
+        },
+      ],
+    );
   };
 
   const resultOptions = [
@@ -117,7 +158,16 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
       <SurfaceCard elevated style={styles.timerCard}>
         <View style={styles.timerHeader}>
           <Text style={styles.timerLabel}>Aktif ziyaret</Text>
-          <StatusBadge label="Konum aktif" tone="success" />
+          <StatusBadge
+            label={
+              gpsState === 'ready'
+                ? 'Konum aktif'
+                : gpsState === 'error'
+                  ? 'Konum kontrol et'
+                  : 'Konum kontrol'
+            }
+            tone={gpsState === 'ready' ? 'success' : gpsState === 'error' ? 'warning' : 'info'}
+          />
         </View>
         <Text style={styles.timerCompany}>{prospectName}</Text>
         <Text style={styles.timerValue}>{formatElapsed(elapsed)}</Text>
@@ -147,7 +197,23 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
         <>
           <SurfaceCard style={styles.summaryCard}>
             <InfoRow label="Müşteri" value={prospectName} />
-            <InfoRow label="Durum" value="Konum doğrulandı, sonuç bekleniyor" muted />
+            <InfoRow
+              label="Durum"
+              value={
+                gpsState === 'ready'
+                  ? 'Konum doğrulandı, sonuç bekleniyor'
+                  : gpsState === 'error'
+                    ? 'Konum tekrar kontrol edilmeli'
+                    : 'Konum kontrol ediliyor'
+              }
+              muted
+            />
+            {gpsState === 'error' ? (
+              <InlineAlert
+                message="GPS doğrulaması şu an alınamadı. Açık alana çıkıp tekrar deneyin."
+                tone="warning"
+              />
+            ) : null}
           </SurfaceCard>
 
           <SurfaceCard style={styles.section}>
@@ -201,6 +267,7 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
 
           <View style={styles.footerActions}>
             <ActionButton label="Ziyareti Sonlandır" onPress={handleEnd} variant="success" loading={submitting} />
+            <ActionButton label="Konumu Yenile" onPress={checkGps} variant="secondary" disabled={submitting} />
             <ActionButton label="Ziyareti İptal Et" onPress={() => setShowCancel(true)} variant="ghost" />
           </View>
         </>

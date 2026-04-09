@@ -9,12 +9,12 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { readCache, writeCache } from '../lib/cache';
 import { getMyCurrentPlan, getActiveVisit } from '../lib/api';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import AppHeader from '../components/ui/AppHeader';
+import DataStatusBanner from '../components/ui/DataStatusBanner';
 import EmptyState from '../components/ui/EmptyState';
-import InlineAlert from '../components/ui/InlineAlert';
-import LoadingState from '../components/ui/LoadingState';
 import ProspectCard from '../components/ui/ProspectCard';
 import RouteListSkeleton from '../components/ui/RouteListSkeleton';
 import ScreenContainer from '../components/ui/ScreenContainer';
@@ -61,7 +61,14 @@ interface ActiveVisit {
   };
 }
 
+const segments = [
+  { key: 'priority', label: 'Öncelikli' },
+  { key: 'today', label: 'Bugün' },
+  { key: 'completed', label: 'Tamamlanan' },
+] as const;
+
 export default function HomeScreen() {
+  const HOME_CACHE_KEY = 'mobile_home_today_route';
   const { user, logout } = useAuth();
   const navigation = useNavigation<any>();
   const [todayItems, setTodayItems] = useState<PlanItem[]>([]);
@@ -69,6 +76,9 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
+  const [selectedSegment, setSelectedSegment] = useState<(typeof segments)[number]['key']>('priority');
+  const [isShowingCachedData, setIsShowingCachedData] = useState(false);
 
   const fetchData = useCallback(async () => {
     try {
@@ -94,15 +104,41 @@ export default function HomeScreen() {
         } else {
           setTodayItems([]);
         }
+        const updatedAt = new Date().toISOString();
+        setLastUpdatedAt(updatedAt);
+        setIsShowingCachedData(false);
+        await writeCache(HOME_CACHE_KEY, {
+          todayItems: plan?.items?.length
+            ? plan.items
+                .filter((item) => {
+                  if (!item.plannedDate) return false;
+                  return new Date(item.plannedDate).toISOString().split('T')[0] === new Date().toISOString().split('T')[0];
+                })
+                .sort((a, b) => a.visitOrder - b.visitOrder)
+            : [],
+          lastUpdatedAt: updatedAt,
+        });
       } else {
-        setTodayItems([]);
+        setErrorMessage(planRes.error?.message || planRes.message || 'Günlük rota verileri alınamadı.');
+        const cached = await readCache<{ todayItems: PlanItem[]; lastUpdatedAt: string }>(HOME_CACHE_KEY);
+        if (cached) {
+          setTodayItems(cached.todayItems);
+          setLastUpdatedAt(cached.lastUpdatedAt);
+          setIsShowingCachedData(true);
+        }
       }
     } catch (err) {
       console.error('Veri yükleme hatası:', err);
       setErrorMessage('Günlük rota verileri alınamadı. Ağı kontrol edip tekrar deneyin.');
+      const cached = await readCache<{ todayItems: PlanItem[]; lastUpdatedAt: string }>(HOME_CACHE_KEY);
+      if (cached) {
+        setTodayItems(cached.todayItems);
+        setLastUpdatedAt(cached.lastUpdatedAt);
+        setIsShowingCachedData(true);
+      }
     }
     setLoading(false);
-  }, []);
+  }, [HOME_CACHE_KEY]);
 
   useFocusEffect(
     useCallback(() => {
@@ -171,16 +207,34 @@ export default function HomeScreen() {
 
   const completedVisits = todayItems.filter((item) => item.status === 'visited').length;
   const pendingVisits = todayItems.filter((item) => item.status === 'pending').length;
+  const overdueVisits = todayItems.filter((item) => item.status === 'skipped').length;
   const heroLabel = activeVisit
     ? `${activeVisit.prospect?.companyName || 'Bir müşteri'} ziyareti devam ediyor`
     : pendingVisits > 0
       ? `${pendingVisits} ziyaret sırada`
       : 'Bugünkü plan temiz';
+  const prioritizedItems = [
+    ...todayItems.filter((item) => item.status === 'skipped'),
+    ...todayItems.filter((item) => item.status === 'pending'),
+  ];
+  const completedItems = todayItems.filter((item) => item.status === 'visited');
+  const visibleItems =
+    selectedSegment === 'priority'
+      ? prioritizedItems
+      : selectedSegment === 'completed'
+        ? completedItems
+        : todayItems;
+  const sectionSubtitle =
+    selectedSegment === 'priority'
+      ? `${prioritizedItems.length} kritik kayıt`
+      : selectedSegment === 'completed'
+        ? `${completedItems.length} tamamlanan ziyaret`
+        : `${todayItems.length} ziyaret planı hazır`;
 
   return (
     <ScreenContainer contentStyle={styles.container}>
       <FlatList
-        data={todayItems}
+        data={visibleItems}
         keyExtractor={(item) => item.id}
         renderItem={({ item }) => (
           <ProspectCard
@@ -234,17 +288,34 @@ export default function HomeScreen() {
             </SurfaceCard>
 
             {errorMessage ? (
-              <InlineAlert
+              <DataStatusBanner
                 title="Rota verisi güncellenemedi"
-                message={errorMessage}
+                description={errorMessage}
                 tone="warning"
+                lastUpdatedAt={lastUpdatedAt}
+                actionLabel="Tekrar Dene"
+                onAction={() => {
+                  setLoading(true);
+                  fetchData();
+                }}
               />
             ) : null}
 
             {refreshing ? (
-              <InlineAlert
-                message="Liste yenileniyor. Güncel rota birkaç saniye içinde görünecek."
+              <DataStatusBanner
+                title="Liste yenileniyor"
+                description="Güncel rota birkaç saniye içinde ekrana yansıyacak."
                 tone="info"
+                lastUpdatedAt={lastUpdatedAt}
+              />
+            ) : null}
+
+            {isShowingCachedData ? (
+              <DataStatusBanner
+                title="Kaydedilen veri gösteriliyor"
+                description="Ağ erişimi sağlanamadığı için cihazdaki son başarılı rota kullanılıyor."
+                tone="info"
+                lastUpdatedAt={lastUpdatedAt}
               />
             ) : null}
 
@@ -255,7 +326,7 @@ export default function HomeScreen() {
 
             <View style={styles.statsRow}>
               <StatCard label="Bekleyen" value={String(pendingVisits)} tone="warning" />
-              <StatCard label="Aktif ziyaret" value={activeVisit ? '1' : '0'} tone="info" />
+              <StatCard label="Geciken" value={String(overdueVisits)} tone="danger" />
             </View>
 
             {activeVisit ? (
@@ -272,9 +343,26 @@ export default function HomeScreen() {
               />
             ) : null}
 
+            <View style={styles.segmentRow}>
+              {segments.map((segment) => {
+                const selected = selectedSegment === segment.key;
+                return (
+                  <TouchableOpacity
+                    key={segment.key}
+                    onPress={() => setSelectedSegment(segment.key)}
+                    style={[styles.segmentChip, selected ? styles.segmentChipSelected : null]}
+                  >
+                    <Text style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}>
+                      {segment.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+
             <SectionHeader
               title="Bugünkü rota"
-              subtitle={`${todayItems.length} ziyaret planı hazır`}
+              subtitle={sectionSubtitle}
               trailing={(
                 <TouchableOpacity onPress={openManualStart}>
                   <Text style={styles.trailingLink}>Manuel başlat</Text>
@@ -340,6 +428,31 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  segmentChip: {
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+  },
+  segmentChipSelected: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  segmentLabel: {
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textMuted,
+  },
+  segmentLabelSelected: {
+    color: theme.colors.primaryStrong,
   },
   separator: {
     height: theme.spacing.md,

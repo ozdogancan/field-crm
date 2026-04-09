@@ -5,6 +5,8 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import GlobalNoticeBanner from './src/components/ui/GlobalNoticeBanner';
+import { AppStatusProvider } from './src/context/AppStatusContext';
 import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { ToastProvider } from './src/context/ToastContext';
 import LoginScreen from './src/screens/LoginScreen';
@@ -110,16 +112,19 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SafeAreaProvider>
-        <ToastProvider>
-          <StatusBar style="dark" />
-          <NavigationContainer theme={navigationTheme}>
-            <AppNavigator />
-          </NavigationContainer>
-          <ToastViewport />
-        </ToastProvider>
-      </SafeAreaProvider>
-    </AuthProvider>
+    <SafeAreaProvider>
+      <AppStatusProvider>
+        <AuthProvider>
+          <ToastProvider>
+            <StatusBar style="dark" />
+            <NavigationContainer theme={navigationTheme}>
+              <AppNavigator />
+            </NavigationContainer>
+            <GlobalNoticeBanner />
+            <ToastViewport />
+          </ToastProvider>
+        </AuthProvider>
+      </AppStatusProvider>
+    </SafeAreaProvider>
   );
 }

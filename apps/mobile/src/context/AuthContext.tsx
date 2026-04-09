@@ -1,5 +1,15 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { login as apiLogin, getToken, getUser, setToken, setUser, clearAuth } from '../lib/api';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import {
+  login as apiLogin,
+  getToken,
+  getUser,
+  setToken,
+  setUser,
+  clearAuth,
+  setApiIssueHandler,
+  setUnauthorizedHandler,
+} from '../lib/api';
+import { useAppStatus } from './AppStatusContext';
 
 interface User {
   id: string;
@@ -25,8 +35,14 @@ const AuthContext = createContext<AuthContextType>({
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const { setNotice } = useAppStatus();
   const [user, setUserState] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+
+  const logout = useCallback(async () => {
+    await clearAuth();
+    setUserState(null);
+  }, []);
 
   useEffect(() => {
     (async () => {
@@ -39,21 +55,40 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
+  useEffect(() => {
+    setUnauthorizedHandler(async () => {
+      setUserState(null);
+    });
+
+    setApiIssueHandler(async (issue) => {
+      setNotice({
+        title:
+          issue.type === 'session'
+            ? 'Oturum kapandı'
+            : issue.type === 'timeout'
+              ? 'Bağlantı yavaş'
+              : 'Bağlantı sorunu',
+        message: issue.message,
+        tone: issue.type === 'session' ? 'warning' : 'danger',
+      });
+    });
+
+    return () => {
+      setUnauthorizedHandler(null);
+      setApiIssueHandler(null);
+    };
+  }, [setNotice]);
+
   const login = async (email: string, password: string) => {
     const res = await apiLogin(email, password);
     if (res.success && res.data) {
-      const { accessToken, refreshToken, user: userData } = res.data as any;
+      const { accessToken, user: userData } = res.data as any;
       await setToken(accessToken);
       await setUser(userData);
       setUserState(userData);
       return { success: true };
     }
     return { success: false, error: res.error?.message || res.message || 'Giriş başarısız' };
-  };
-
-  const logout = async () => {
-    await clearAuth();
-    setUserState(null);
   };
 
   return (

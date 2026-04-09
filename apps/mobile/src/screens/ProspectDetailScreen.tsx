@@ -117,6 +117,47 @@ export default function ProspectDetailScreen({ route }: any) {
     }
   };
 
+  const latestVisit = prospect?.visits?.[0];
+  const recommendation = latestVisit
+    ? latestVisit.result === 'positive'
+      ? {
+          tone: 'success' as const,
+          badge: 'Sıcak fırsat',
+          title: 'Takibi geciktirmeyin',
+          description: 'Son görüşme olumlu görünüyor. Kısa aralıkla tekrar temas kurup ziyareti hızlıca yenileyin.',
+          actionLabel: 'Yeni ziyaret başlat',
+        }
+      : latestVisit.result === 'neutral'
+        ? {
+            tone: 'warning' as const,
+            badge: 'Takip gerekli',
+            title: 'Kararı netleştirin',
+            description: 'Son görüşme nötr kalmış. Notları gözden geçirip net bir sonraki adımla tekrar gidin.',
+            actionLabel: 'Takip ziyareti başlat',
+          }
+        : latestVisit.result === 'negative'
+          ? {
+              tone: 'danger' as const,
+              badge: 'Düşük potansiyel',
+              title: 'Ziyareti dikkatli planlayın',
+              description: 'Son görüşme olumsuz bitmiş. Tekrar gitmeden önce telefonla ön doğrulama yapmak daha güvenli olabilir.',
+              actionLabel: 'Yine de ziyaret başlat',
+            }
+          : {
+              tone: 'info' as const,
+              badge: 'Geçmiş var',
+              title: 'Kısa hazırlık yapın',
+              description: 'Önceki kayıt var ama net sonuç görünmüyor. Notları okuyup sahaya çıkın.',
+              actionLabel: 'Ziyareti başlat',
+            }
+    : {
+        tone: 'info' as const,
+        badge: 'İlk temas',
+        title: 'İlk ziyaret için hazır',
+        description: 'Bu müşteri için kayıtlı görüşme görünmüyor. İlk ziyaret notlarını düzenli tutun.',
+        actionLabel: 'İlk ziyareti başlat',
+      };
+
   const openPhone = async () => {
     if (!prospect?.phone) return;
     const url = `tel:${prospect.phone}`;
@@ -202,6 +243,32 @@ export default function ProspectDetailScreen({ route }: any) {
               </View>
             </SurfaceCard>
 
+            <SurfaceCard style={[styles.section, styles.recommendationCard]}>
+              <View style={styles.recommendationHeader}>
+                <StatusBadge label={recommendation.badge} tone={recommendation.tone} />
+              </View>
+              <Text style={styles.recommendationTitle}>{recommendation.title}</Text>
+              <Text style={styles.recommendationText}>{recommendation.description}</Text>
+              {latestVisit?.resultNotes ? (
+                <View style={styles.recommendationNoteBox}>
+                  <Text style={styles.recommendationNoteLabel}>Son not</Text>
+                  <Text style={styles.recommendationNoteText}>{latestVisit.resultNotes}</Text>
+                </View>
+              ) : null}
+              <ActionButton
+                label={recommendation.actionLabel}
+                onPress={() =>
+                  navigation.navigate('StartVisit', {
+                    prospectId: prospect.id,
+                    prospectName: prospect.companyName,
+                    prospectAddress: prospect.address,
+                    routePlanItemId: routePlanItemId || '',
+                  })
+                }
+                variant="primary"
+              />
+            </SurfaceCard>
+
             {prospect.notes ? (
               <SurfaceCard style={styles.section}>
                 <SectionHeader title="Saha notu" />
@@ -244,18 +311,6 @@ export default function ProspectDetailScreen({ route }: any) {
               )}
             </SurfaceCard>
 
-            <ActionButton
-              label="Ziyareti Başlat"
-              onPress={() =>
-                navigation.navigate('StartVisit', {
-                  prospectId: prospect.id,
-                  prospectName: prospect.companyName,
-                  prospectAddress: prospect.address,
-                  routePlanItemId: routePlanItemId || '',
-                })
-              }
-              variant="success"
-            />
           </>
         )}
       </ScrollView>
@@ -287,6 +342,43 @@ const styles = StyleSheet.create({
   },
   section: {
     gap: theme.spacing.lg,
+  },
+  recommendationCard: {
+    backgroundColor: theme.colors.surfaceMuted,
+  },
+  recommendationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  recommendationTitle: {
+    fontSize: theme.typography.titleSm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.text,
+  },
+  recommendationText: {
+    fontSize: theme.typography.body,
+    lineHeight: 22,
+    color: theme.colors.textMuted,
+  },
+  recommendationNoteBox: {
+    backgroundColor: theme.colors.surface,
+    borderRadius: theme.radius.md,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  recommendationNoteLabel: {
+    fontSize: theme.typography.caption,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  recommendationNoteText: {
+    fontSize: theme.typography.bodySm,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
   },
   actionStack: {
     gap: theme.spacing.md,

@@ -8,6 +8,7 @@ import InfoRow from '../components/ui/InfoRow';
 import ScreenContainer from '../components/ui/ScreenContainer';
 import SectionHeader from '../components/ui/SectionHeader';
 import SurfaceCard from '../components/ui/SurfaceCard';
+import { getApiBaseUrl } from '../lib/api';
 import { theme } from '../theme';
 
 export default function ProfileScreen() {
@@ -46,6 +47,10 @@ export default function ProfileScreen() {
         <View style={styles.preferenceRow}>
           <Text style={styles.preferenceTitle}>Konum</Text>
           <Text style={styles.preferenceValue}>Ziyaret doğrulama için gerekli</Text>
+        </View>
+        <View style={styles.preferenceRow}>
+          <Text style={styles.preferenceTitle}>API hedefi</Text>
+          <Text style={styles.preferenceValue}>{getApiBaseUrl()}</Text>
         </View>
       </SurfaceCard>
 

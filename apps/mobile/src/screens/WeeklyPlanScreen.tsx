@@ -3,14 +3,15 @@ import { RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } 
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import ActiveVisitBanner from '../components/ui/ActiveVisitBanner';
 import AppHeader from '../components/ui/AppHeader';
+import DataStatusBanner from '../components/ui/DataStatusBanner';
 import EmptyState from '../components/ui/EmptyState';
-import InlineAlert from '../components/ui/InlineAlert';
 import ProspectCard from '../components/ui/ProspectCard';
 import RouteListSkeleton from '../components/ui/RouteListSkeleton';
 import ScreenContainer from '../components/ui/ScreenContainer';
 import SectionHeader from '../components/ui/SectionHeader';
 import StatCard from '../components/ui/StatCard';
 import SurfaceCard from '../components/ui/SurfaceCard';
+import { readCache, writeCache } from '../lib/cache';
 import { getMyCurrentPlan } from '../lib/api';
 import { StatusTone, theme } from '../theme';
 
@@ -36,30 +37,59 @@ interface Plan {
 }
 
 const dayLabels = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+const weeklySegments = [
+  { key: 'day', label: 'Günlük' },
+  { key: 'pending', label: 'Bekleyen' },
+  { key: 'completed', label: 'Tamamlanan' },
+] as const;
 
 export default function WeeklyPlanScreen() {
+  const WEEKLY_PLAN_CACHE_KEY = 'mobile_weekly_plan';
   const navigation = useNavigation<any>();
   const [plan, setPlan] = useState<Plan | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState(0);
+  const [selectedSegment, setSelectedSegment] = useState<(typeof weeklySegments)[number]['key']>('day');
+  const [isShowingCachedData, setIsShowingCachedData] = useState(false);
 
   const loadPlan = useCallback(async () => {
     try {
       setErrorMessage('');
       const res = await getMyCurrentPlan();
       if (res.success) {
-        setPlan((res.data as Plan) || null);
+        const nextPlan = (res.data as Plan) || null;
+        const updatedAt = new Date().toISOString();
+        setPlan(nextPlan);
+        setLastUpdatedAt(updatedAt);
+        setIsShowingCachedData(false);
+        await writeCache(WEEKLY_PLAN_CACHE_KEY, {
+          plan: nextPlan,
+          lastUpdatedAt: updatedAt,
+        });
       } else {
         setPlan(null);
         setErrorMessage(res.error?.message || res.message || 'Haftalık plan yüklenemedi.');
+        const cached = await readCache<{ plan: Plan | null; lastUpdatedAt: string }>(WEEKLY_PLAN_CACHE_KEY);
+        if (cached) {
+          setPlan(cached.plan);
+          setLastUpdatedAt(cached.lastUpdatedAt);
+          setIsShowingCachedData(true);
+        }
       }
     } catch {
       setErrorMessage('Haftalık plan yüklenemedi.');
+      const cached = await readCache<{ plan: Plan | null; lastUpdatedAt: string }>(WEEKLY_PLAN_CACHE_KEY);
+      if (cached) {
+        setPlan(cached.plan);
+        setLastUpdatedAt(cached.lastUpdatedAt);
+        setIsShowingCachedData(true);
+      }
     }
     setLoading(false);
-  }, []);
+  }, [WEEKLY_PLAN_CACHE_KEY]);
 
   useFocusEffect(
     useCallback(() => {
@@ -87,6 +117,12 @@ export default function WeeklyPlanScreen() {
   const selectedItems = groupedItems[selectedDay] || [];
   const selectedCompleted = selectedItems.filter((item) => item.status === 'visited').length;
   const selectedPending = selectedItems.filter((item) => item.status === 'pending').length;
+  const visibleItems =
+    selectedSegment === 'pending'
+      ? selectedItems.filter((item) => item.status === 'pending' || item.status === 'skipped')
+      : selectedSegment === 'completed'
+        ? selectedItems.filter((item) => item.status === 'visited')
+        : selectedItems;
 
   const statusTone = (status: string): StatusTone => {
     switch (status) {
@@ -129,7 +165,37 @@ export default function WeeklyPlanScreen() {
 
         <ActiveVisitBanner />
 
-        {errorMessage ? <InlineAlert title="Plan alınamadı" message={errorMessage} tone="warning" /> : null}
+        {errorMessage ? (
+          <DataStatusBanner
+            title="Plan alınamadı"
+            description={errorMessage}
+            tone="warning"
+            lastUpdatedAt={lastUpdatedAt}
+            actionLabel="Tekrar Dene"
+            onAction={() => {
+              setLoading(true);
+              loadPlan();
+            }}
+          />
+        ) : null}
+
+        {refreshing ? (
+          <DataStatusBanner
+            title="Plan yenileniyor"
+            description="Haftalık rota yeniden çekiliyor."
+            tone="info"
+            lastUpdatedAt={lastUpdatedAt}
+          />
+        ) : null}
+
+        {isShowingCachedData ? (
+          <DataStatusBanner
+            title="Kaydedilen plan gösteriliyor"
+            description="Bağlantı kurulamadığı için cihazdaki son başarılı haftalık plan kullanılıyor."
+            tone="info"
+            lastUpdatedAt={lastUpdatedAt}
+          />
+        ) : null}
 
         <SurfaceCard elevated style={styles.dayPickerCard}>
           <SectionHeader
@@ -161,7 +227,33 @@ export default function WeeklyPlanScreen() {
           <StatCard label="Haftalık toplam" value={String(plan?.items.length || 0)} tone="info" />
         </View>
 
-        <SectionHeader title={`${dayLabels[selectedDay]} rotası`} subtitle="Kartlara dokunarak müşteri detayını açın" />
+        <View style={styles.segmentRow}>
+          {weeklySegments.map((segment) => {
+            const selected = selectedSegment === segment.key;
+            return (
+              <TouchableOpacity
+                key={segment.key}
+                onPress={() => setSelectedSegment(segment.key)}
+                style={[styles.segmentChip, selected ? styles.segmentChipSelected : null]}
+              >
+                <Text style={[styles.segmentLabel, selected ? styles.segmentLabelSelected : null]}>
+                  {segment.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+
+        <SectionHeader
+          title={`${dayLabels[selectedDay]} rotası`}
+          subtitle={
+            selectedSegment === 'pending'
+              ? `${visibleItems.length} bekleyen kayıt`
+              : selectedSegment === 'completed'
+                ? `${visibleItems.length} tamamlanan kayıt`
+                : 'Kartlara dokunarak müşteri detayını açın'
+          }
+        />
 
         {loading ? (
           <RouteListSkeleton count={4} />
@@ -180,9 +272,14 @@ export default function WeeklyPlanScreen() {
             title="Seçilen gün boş"
             description="Bu gün için ziyaret planlanmamış. Diğer günleri kontrol edin."
           />
+        ) : visibleItems.length === 0 ? (
+          <EmptyState
+            title="Bu segment boş"
+            description="Seçtiğiniz filtre için bu gün özelinde kayıt görünmüyor."
+          />
         ) : (
           <View style={styles.list}>
-            {selectedItems.map((item) => (
+            {visibleItems.map((item) => (
               <ProspectCard
                 key={item.id}
                 order={item.visitOrder}
@@ -263,5 +360,30 @@ const styles = StyleSheet.create({
   statsRow: {
     flexDirection: 'row',
     gap: theme.spacing.md,
+  },
+  segmentRow: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  segmentChip: {
+    minHeight: 40,
+    paddingHorizontal: theme.spacing.md,
+    borderRadius: theme.radius.pill,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    backgroundColor: theme.colors.surface,
+    justifyContent: 'center',
+  },
+  segmentChipSelected: {
+    backgroundColor: theme.colors.primarySoft,
+    borderColor: theme.colors.primary,
+  },
+  segmentLabel: {
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textMuted,
+  },
+  segmentLabelSelected: {
+    color: theme.colors.primaryStrong,
   },
 });

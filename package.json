@@ -5,11 +5,16 @@
   "workspaces": [
     "packages/*",
     "apps/backend",
-    "apps/web"
+    "apps/web",
+    "apps/mobile"
   ],
   "scripts": {
     "backend:dev": "npm run dev -w apps/backend",
     "web:dev": "npm run dev -w apps/web",
+    "mobile:dev": "npm run start -w apps/mobile",
+    "mobile:android": "npm run android -w apps/mobile",
+    "mobile:ios": "npm run ios -w apps/mobile",
+    "mobile:web": "npm run web -w apps/mobile",
     "backend:build": "npm run build -w apps/backend",
     "web:build": "npm run build -w apps/web"
   }
