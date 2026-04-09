@@ -134,3 +134,32 @@ export async function getCurrentWeek() {
 export async function getUnassignedProspects() {
   return api("/prospects/unassigned", { token: getToken()! });
 }
+
+// Visits
+export async function getVisits(params: {
+  page?: number;
+  limit?: number;
+  userId?: string;
+  result?: string;
+  status?: string;
+  startDate?: string;
+  endDate?: string;
+} = {}) {
+  const q = new URLSearchParams();
+  if (params.page) q.set("page", String(params.page));
+  if (params.limit) q.set("limit", String(params.limit));
+  if (params.userId) q.set("userId", params.userId);
+  if (params.result) q.set("result", params.result);
+  if (params.status) q.set("status", params.status);
+  if (params.startDate) q.set("startDate", params.startDate);
+  if (params.endDate) q.set("endDate", params.endDate);
+  return api(`/visits?${q.toString()}`, { token: getToken()! });
+}
+
+export async function getVisit(id: string) {
+  return api(`/visits/${id}`, { token: getToken()! });
+}
+
+export async function getTodayStats() {
+  return api("/visits/today-stats", { token: getToken()! });
+}
