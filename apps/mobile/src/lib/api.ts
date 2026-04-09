@@ -121,6 +121,22 @@ export async function getActiveVisit() {
   return api('/visits/active', { token: token! });
 }
 
+export async function getMyVisitHistory(params: {
+  page?: number;
+  limit?: number;
+  result?: string;
+  status?: string;
+} = {}) {
+  const token = await getToken();
+  const q = new URLSearchParams();
+  if (params.page) q.set('page', String(params.page));
+  if (params.limit) q.set('limit', String(params.limit));
+  if (params.result) q.set('result', params.result);
+  if (params.status) q.set('status', params.status);
+  const query = q.toString();
+  return api(`/visits/me/history${query ? `?${query}` : ''}`, { token: token! });
+}
+
 // Planning
 export async function getMyPlans(params: { year?: number; weekNumber?: number } = {}) {
   const token = await getToken();
@@ -135,4 +151,14 @@ export async function getMyPlans(params: { year?: number; weekNumber?: number } 
 export async function getCurrentWeek() {
   const token = await getToken();
   return api('/planning/current-week', { token: token! });
+}
+
+export async function getMyCurrentPlan() {
+  const token = await getToken();
+  return api('/planning/me/current', { token: token! });
+}
+
+export async function getProspect(id: string) {
+  const token = await getToken();
+  return api(`/prospects/${id}`, { token: token! });
 }

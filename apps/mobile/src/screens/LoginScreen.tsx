@@ -1,15 +1,19 @@
 import React, { useState } from 'react';
 import {
-  View,
   Text,
-  TextInput,
-  TouchableOpacity,
   StyleSheet,
-  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import ActionButton from '../components/ui/ActionButton';
+import InlineAlert from '../components/ui/InlineAlert';
+import ScreenContainer from '../components/ui/ScreenContainer';
+import SurfaceCard from '../components/ui/SurfaceCard';
+import TextField from '../components/ui/TextField';
+import { theme } from '../theme';
 
 export default function LoginScreen() {
   const { login } = useAuth();
@@ -17,6 +21,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -37,82 +42,148 @@ export default function LoginScreen() {
       style={styles.container}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inner}>
+      <ScreenContainer contentStyle={styles.inner}>
         <View style={styles.header}>
+          <View style={styles.logoMark}>
+            <Text style={styles.logoMarkText}>FC</Text>
+          </View>
           <Text style={styles.title}>Field CRM</Text>
-          <Text style={styles.subtitle}>Saha Takip Sistemi</Text>
+          <Text style={styles.subtitle}>
+            Saha operasyonunu hızlı, okunaklı ve güvenilir şekilde yönetin.
+          </Text>
         </View>
 
-        <View style={styles.form}>
-          <Text style={styles.label}>Email</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="ornek@fieldcrm.com"
-            value={email}
-            onChangeText={setEmail}
-            keyboardType="email-address"
-            autoCapitalize="none"
-            autoCorrect={false}
-          />
+        <View style={styles.highlights}>
+          <View style={styles.highlightItem}>
+            <Text style={styles.highlightValue}>Hızlı giriş</Text>
+            <Text style={styles.highlightLabel}>Tek ekranda oturum açın</Text>
+          </View>
+          <View style={styles.highlightItem}>
+            <Text style={styles.highlightValue}>Saha odaklı</Text>
+            <Text style={styles.highlightLabel}>Yüksek kontrast, net aksiyon</Text>
+          </View>
+        </View>
 
-          <Text style={styles.label}>Şifre</Text>
-          <TextInput
-            style={styles.input}
-            placeholder="Şifrenizi girin"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-          />
+        <SurfaceCard elevated style={styles.formCard}>
+          <View style={styles.form}>
+            <TextField
+              label="Email"
+              placeholder="ornek@fieldcrm.com"
+              value={email}
+              onChangeText={setEmail}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
 
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+            <TextField
+              label="Şifre"
+              placeholder="Şifrenizi girin"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry={!showPassword}
+              trailingLabel={showPassword ? 'Gizle' : 'Göster'}
+              onTrailingPress={() => setShowPassword((current) => !current)}
+            />
 
-          <TouchableOpacity
-            style={[styles.button, loading && styles.buttonDisabled]}
-            onPress={handleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.buttonText}>Giriş Yap</Text>
-            )}
+            {error ? <InlineAlert message={error} tone="danger" /> : null}
+
+            <ActionButton label="Giriş Yap" onPress={handleLogin} loading={loading} />
+          </View>
+        </SurfaceCard>
+
+        {__DEV__ ? (
+          <TouchableOpacity style={styles.devHint}>
+            <Text style={styles.devHintTitle}>Geliştirme hesabı</Text>
+            <Text style={styles.devHintText}>ahmet@fieldcrm.com / saha1234</Text>
           </TouchableOpacity>
-        </View>
-
-        <Text style={styles.hint}>
-          Saha kullanıcısı: ahmet@fieldcrm.com / saha1234
-        </Text>
-      </View>
+        ) : null}
+      </ScreenContainer>
     </KeyboardAvoidingView>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  inner: { flex: 1, justifyContent: 'center', paddingHorizontal: 32 },
-  header: { alignItems: 'center', marginBottom: 48 },
-  title: { fontSize: 32, fontWeight: 'bold', color: '#1e40af' },
-  subtitle: { fontSize: 16, color: '#64748b', marginTop: 4 },
-  form: { gap: 8 },
-  label: { fontSize: 14, fontWeight: '600', color: '#334155', marginTop: 8 },
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    fontSize: 16,
+  container: { flex: 1, backgroundColor: theme.colors.background },
+  inner: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    paddingBottom: theme.spacing['3xl'],
+    gap: theme.spacing.xl,
   },
-  error: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginTop: 8 },
-  button: {
-    backgroundColor: '#1e40af',
-    borderRadius: 8,
-    paddingVertical: 14,
+  header: {
     alignItems: 'center',
-    marginTop: 16,
+    gap: theme.spacing.sm,
+    marginBottom: theme.spacing.sm,
   },
-  buttonDisabled: { opacity: 0.7 },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
-  hint: { textAlign: 'center', color: '#94a3b8', fontSize: 12, marginTop: 32 },
+  logoMark: {
+    width: 68,
+    height: 68,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: theme.colors.primary,
+  },
+  logoMarkText: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.titleSm,
+    fontWeight: theme.fontWeight.bold,
+  },
+  title: {
+    fontSize: theme.typography.titleLg,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.text,
+  },
+  subtitle: {
+    fontSize: theme.typography.body,
+    lineHeight: 22,
+    color: theme.colors.textMuted,
+    textAlign: 'center',
+    maxWidth: 320,
+  },
+  formCard: {
+    paddingVertical: theme.spacing.xl,
+  },
+  form: {
+    gap: theme.spacing.lg,
+  },
+  highlights: {
+    flexDirection: 'row',
+    gap: theme.spacing.md,
+  },
+  highlightItem: {
+    flex: 1,
+    backgroundColor: theme.colors.backgroundAccent,
+    borderWidth: 1,
+    borderColor: theme.colors.border,
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  highlightValue: {
+    fontSize: theme.typography.body,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.text,
+  },
+  highlightLabel: {
+    fontSize: theme.typography.bodySm,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
+  devHint: {
+    alignItems: 'center',
+    paddingVertical: theme.spacing.md,
+    gap: theme.spacing.xs,
+  },
+  devHintTitle: {
+    fontSize: theme.typography.caption,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.textSubtle,
+    textTransform: 'uppercase',
+    letterSpacing: 0.6,
+  },
+  devHintText: {
+    fontSize: theme.typography.bodySm,
+    color: theme.colors.textMuted,
+  },
 });

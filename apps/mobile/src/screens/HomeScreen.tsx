@@ -1,16 +1,28 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
-  View,
   Text,
   StyleSheet,
   FlatList,
-  TouchableOpacity,
   RefreshControl,
   Alert,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
-import { getMyPlans, getCurrentWeek, getActiveVisit } from '../lib/api';
+import { getMyCurrentPlan, getActiveVisit } from '../lib/api';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AppHeader from '../components/ui/AppHeader';
+import EmptyState from '../components/ui/EmptyState';
+import InlineAlert from '../components/ui/InlineAlert';
+import LoadingState from '../components/ui/LoadingState';
+import ProspectCard from '../components/ui/ProspectCard';
+import RouteListSkeleton from '../components/ui/RouteListSkeleton';
+import ScreenContainer from '../components/ui/ScreenContainer';
+import SectionHeader from '../components/ui/SectionHeader';
+import StatCard from '../components/ui/StatCard';
+import StickyBanner from '../components/ui/StickyBanner';
+import SurfaceCard from '../components/ui/SurfaceCard';
+import { StatusTone, theme } from '../theme';
 
 interface PlanItem {
   id: string;
@@ -56,13 +68,12 @@ export default function HomeScreen() {
   const [activeVisit, setActiveVisit] = useState<ActiveVisit | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   const fetchData = useCallback(async () => {
     try {
-      const [weekRes, activeRes] = await Promise.all([
-        getCurrentWeek(),
-        getActiveVisit(),
-      ]);
+      setErrorMessage('');
+      const [planRes, activeRes] = await Promise.all([getMyCurrentPlan(), getActiveVisit()]);
 
       if (activeRes.success && activeRes.data) {
         setActiveVisit(activeRes.data as ActiveVisit);
@@ -70,32 +81,25 @@ export default function HomeScreen() {
         setActiveVisit(null);
       }
 
-      if (weekRes.success && weekRes.data) {
-        const { year, week } = weekRes.data as { year: number; week: number };
-        const plansRes = await getMyPlans({ year, weekNumber: week });
+      if (planRes.success && planRes.data) {
+        const plan = planRes.data as Plan;
+        if (plan?.items?.length > 0) {
+          const todayStr = new Date().toISOString().split('T')[0];
+          const items = plan.items.filter((item) => {
+            if (!item.plannedDate) return false;
+            return new Date(item.plannedDate).toISOString().split('T')[0] === todayStr;
+          });
 
-        if (plansRes.success && plansRes.data) {
-          const plans = plansRes.data as Plan[];
-          if (plans.length > 0) {
-            const today = new Date();
-            const dayOfWeek = today.getDay() || 7; // 1=Mon, 7=Sun
-            const todayStr = today.toISOString().split('T')[0];
-
-            // Find today's items from all plans
-            const items = plans[0].items.filter((item) => {
-              if (!item.plannedDate) return false;
-              const itemDate = new Date(item.plannedDate).toISOString().split('T')[0];
-              return itemDate === todayStr;
-            });
-
-            setTodayItems(items.sort((a, b) => a.visitOrder - b.visitOrder));
-          } else {
-            setTodayItems([]);
-          }
+          setTodayItems(items.sort((a, b) => a.visitOrder - b.visitOrder));
+        } else {
+          setTodayItems([]);
         }
+      } else {
+        setTodayItems([]);
       }
     } catch (err) {
       console.error('Veri yükleme hatası:', err);
+      setErrorMessage('Günlük rota verileri alınamadı. Ağı kontrol edip tekrar deneyin.');
     }
     setLoading(false);
   }, []);
@@ -112,6 +116,20 @@ export default function HomeScreen() {
     setRefreshing(false);
   };
 
+  const openManualStart = () => {
+    if (activeVisit) {
+      Alert.alert('Uyarı', 'Devam eden bir ziyaretiniz var.');
+      return;
+    }
+
+    navigation.navigate('StartVisit', {
+      prospectId: '',
+      prospectName: '',
+      prospectAddress: '',
+      routePlanItemId: '',
+    });
+  };
+
   const handleStartVisit = (item: PlanItem) => {
     if (activeVisit) {
       Alert.alert('Uyarı', 'Devam eden bir ziyaretiniz var. Önce onu sonlandırın.');
@@ -125,217 +143,210 @@ export default function HomeScreen() {
     });
   };
 
-  const statusColor = (status: string) => {
+  const statusTone = (status: string): StatusTone => {
     switch (status) {
-      case 'visited': return '#22c55e';
-      case 'pending': return '#3b82f6';
-      case 'skipped': return '#ef4444';
-      default: return '#94a3b8';
+      case 'visited':
+        return 'success';
+      case 'pending':
+        return 'primary';
+      case 'skipped':
+        return 'danger';
+      default:
+        return 'neutral';
     }
   };
 
   const statusText = (status: string) => {
     switch (status) {
-      case 'visited': return 'Ziyaret Edildi';
-      case 'pending': return 'Bekliyor';
-      case 'skipped': return 'Atlandı';
-      default: return status;
+      case 'visited':
+        return 'Ziyaret Edildi';
+      case 'pending':
+        return 'Bekliyor';
+      case 'skipped':
+        return 'Atlandı';
+      default:
+        return status;
     }
   };
 
-  const renderItem = ({ item }: { item: PlanItem }) => (
-    <TouchableOpacity
-      style={styles.card}
-      onPress={() => handleStartVisit(item)}
-      disabled={item.status === 'visited'}
-    >
-      <View style={styles.cardHeader}>
-        <View style={styles.orderBadge}>
-          <Text style={styles.orderText}>{item.visitOrder}</Text>
-        </View>
-        <View style={styles.cardInfo}>
-          <Text style={styles.companyName}>{item.prospect?.companyName || 'Bilinmeyen'}</Text>
-          <Text style={styles.contactPerson}>{item.prospect?.contactPerson}</Text>
-        </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusColor(item.status) + '20' }]}>
-          <Text style={[styles.statusText, { color: statusColor(item.status) }]}>
-            {statusText(item.status)}
-          </Text>
-        </View>
-      </View>
-      {item.prospect?.address && (
-        <Text style={styles.address} numberOfLines={1}>{item.prospect.address}</Text>
-      )}
-      {item.prospect?.sector && (
-        <Text style={styles.sector}>{item.prospect.sector}</Text>
-      )}
-    </TouchableOpacity>
-  );
+  const completedVisits = todayItems.filter((item) => item.status === 'visited').length;
+  const pendingVisits = todayItems.filter((item) => item.status === 'pending').length;
+  const heroLabel = activeVisit
+    ? `${activeVisit.prospect?.companyName || 'Bir müşteri'} ziyareti devam ediyor`
+    : pendingVisits > 0
+      ? `${pendingVisits} ziyaret sırada`
+      : 'Bugünkü plan temiz';
 
   return (
-    <View style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
-        <View>
-          <Text style={styles.greeting}>Merhaba, {user?.fullName?.split(' ')[0]}</Text>
-          <Text style={styles.date}>
-            {new Date().toLocaleDateString('tr-TR', { weekday: 'long', day: 'numeric', month: 'long' })}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>Çıkış</Text>
-        </TouchableOpacity>
-      </View>
+    <ScreenContainer contentStyle={styles.container}>
+      <FlatList
+        data={todayItems}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <ProspectCard
+            order={item.visitOrder}
+            companyName={item.prospect?.companyName || 'Bilinmeyen'}
+            contactPerson={item.prospect?.contactPerson}
+            address={item.prospect?.address}
+            statusLabel={statusText(item.status)}
+            statusTone={statusTone(item.status)}
+            onPress={() =>
+              navigation.navigate('ProspectDetail', {
+                prospectId: item.prospect?.id || item.prospectId,
+                routePlanItemId: item.id,
+              })
+            }
+            actionLabel={item.status === 'visited' ? 'Detay' : 'Başlat'}
+            onActionPress={() =>
+              item.status === 'visited'
+                ? navigation.navigate('ProspectDetail', {
+                    prospectId: item.prospect?.id || item.prospectId,
+                    routePlanItemId: item.id,
+                  })
+                : handleStartVisit(item)
+            }
+            disabled={item.status === 'visited'}
+          />
+        )}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.colors.primary} />
+        }
+        ListHeaderComponent={(
+          <View style={styles.listHeader}>
+            <AppHeader
+              eyebrow="Bugun"
+              title={`Merhaba, ${user?.fullName?.split(' ')[0] || ''}`}
+              subtitle={new Date().toLocaleDateString('tr-TR', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+              })}
+              trailingLabel="Çıkış"
+              onTrailingPress={logout}
+            />
 
-      {/* Active Visit Banner */}
-      {activeVisit && (
-        <TouchableOpacity
-          style={styles.activeBanner}
-          onPress={() =>
-            navigation.navigate('ActiveVisit', {
-              visitId: activeVisit.id,
-              prospectName: activeVisit.prospect?.companyName || 'Müşteri',
-            })
-          }
-        >
-          <View style={styles.activeDot} />
-          <View style={{ flex: 1 }}>
-            <Text style={styles.activeTitle}>Devam Eden Ziyaret</Text>
-            <Text style={styles.activeCompany}>{activeVisit.prospect?.companyName}</Text>
+            <SurfaceCard elevated style={styles.heroCard}>
+              <Text style={styles.heroEyebrow}>Gün özeti</Text>
+              <Text style={styles.heroTitle}>{heroLabel}</Text>
+              <Text style={styles.heroDescription}>
+                Önce aktif ziyareti yönetin, ardından bugünkü sıraya göre devam edin.
+              </Text>
+            </SurfaceCard>
+
+            {errorMessage ? (
+              <InlineAlert
+                title="Rota verisi güncellenemedi"
+                message={errorMessage}
+                tone="warning"
+              />
+            ) : null}
+
+            {refreshing ? (
+              <InlineAlert
+                message="Liste yenileniyor. Güncel rota birkaç saniye içinde görünecek."
+                tone="info"
+              />
+            ) : null}
+
+            <View style={styles.statsRow}>
+              <StatCard label="Planlanan" value={String(todayItems.length)} tone="primary" />
+              <StatCard label="Tamamlanan" value={String(completedVisits)} tone="success" />
+            </View>
+
+            <View style={styles.statsRow}>
+              <StatCard label="Bekleyen" value={String(pendingVisits)} tone="warning" />
+              <StatCard label="Aktif ziyaret" value={activeVisit ? '1' : '0'} tone="info" />
+            </View>
+
+            {activeVisit ? (
+              <StickyBanner
+                title="Devam eden ziyaret"
+                description={activeVisit.prospect?.companyName || 'Müşteri ziyareti devam ediyor'}
+                badge="Canlı"
+                onPress={() =>
+                  navigation.navigate('ActiveVisit', {
+                    visitId: activeVisit.id,
+                    prospectName: activeVisit.prospect?.companyName || 'Müşteri',
+                  })
+                }
+              />
+            ) : null}
+
+            <SectionHeader
+              title="Bugünkü rota"
+              subtitle={`${todayItems.length} ziyaret planı hazır`}
+              trailing={(
+                <TouchableOpacity onPress={openManualStart}>
+                  <Text style={styles.trailingLink}>Manuel başlat</Text>
+                </TouchableOpacity>
+              )}
+            />
           </View>
-          <Text style={styles.activeArrow}>→</Text>
-        </TouchableOpacity>
-      )}
-
-      {/* Today's Plan */}
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Bugünkü Plan</Text>
-        <Text style={styles.sectionCount}>{todayItems.length} ziyaret</Text>
-      </View>
-
-      {loading ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>Yükleniyor...</Text>
-        </View>
-      ) : todayItems.length === 0 ? (
-        <View style={styles.empty}>
-          <Text style={styles.emptyText}>Bugün için planlanmış ziyaret yok.</Text>
-          <TouchableOpacity
-            style={styles.manualBtn}
-            onPress={() => {
-              if (activeVisit) {
-                Alert.alert('Uyarı', 'Devam eden bir ziyaretiniz var.');
-                return;
-              }
-              navigation.navigate('StartVisit', {
-                prospectId: '',
-                prospectName: '',
-                prospectAddress: '',
-                routePlanItemId: '',
-              });
-            }}
-          >
-            <Text style={styles.manualBtnText}>Manuel Ziyaret Başlat</Text>
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <FlatList
-          data={todayItems}
-          keyExtractor={(item) => item.id}
-          renderItem={renderItem}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
-          contentContainerStyle={{ paddingBottom: 100 }}
-        />
-      )}
-    </View>
+        )}
+        ListEmptyComponent={
+          loading ? (
+            <RouteListSkeleton count={4} />
+          ) : (
+            <EmptyState
+              title="Bugün rota boş"
+              description="Planlı ziyaret görünmüyor. Gerekirse manuel ziyaret başlatabilirsiniz."
+              actionLabel="Manuel Ziyaret Başlat"
+              onAction={openManualStart}
+            />
+          )
+        }
+        ItemSeparatorComponent={() => <View style={styles.separator} />}
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      />
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
-  header: {
+  container: {
+    flex: 1,
+  },
+  content: {
+    paddingBottom: 120,
+    gap: theme.spacing.md,
+  },
+  listHeader: {
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing.lg,
+  },
+  heroCard: {
+    backgroundColor: theme.colors.primaryStrong,
+    borderColor: theme.colors.primaryStrong,
+    gap: theme.spacing.sm,
+  },
+  heroEyebrow: {
+    fontSize: theme.typography.caption,
+    fontWeight: theme.fontWeight.bold,
+    color: '#BEECE8',
+    textTransform: 'uppercase',
+    letterSpacing: 0.8,
+  },
+  heroTitle: {
+    fontSize: theme.typography.titleSm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.surface,
+  },
+  heroDescription: {
+    fontSize: theme.typography.body,
+    lineHeight: 22,
+    color: '#D9F7F4',
+  },
+  statsRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 60,
-    paddingBottom: 16,
-    backgroundColor: '#1e40af',
+    gap: theme.spacing.md,
   },
-  greeting: { fontSize: 20, fontWeight: 'bold', color: '#fff' },
-  date: { fontSize: 14, color: '#bfdbfe', marginTop: 2 },
-  logoutBtn: { padding: 8 },
-  logoutText: { color: '#bfdbfe', fontSize: 14 },
-
-  activeBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fef3c7',
-    marginHorizontal: 16,
-    marginTop: 12,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#fbbf24',
+  separator: {
+    height: theme.spacing.md,
   },
-  activeDot: {
-    width: 10,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: '#f59e0b',
-    marginRight: 12,
+  trailingLink: {
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.primaryStrong,
   },
-  activeTitle: { fontSize: 12, color: '#92400e', fontWeight: '600' },
-  activeCompany: { fontSize: 15, color: '#78350f', fontWeight: 'bold' },
-  activeArrow: { fontSize: 20, color: '#92400e' },
-
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 8,
-  },
-  sectionTitle: { fontSize: 18, fontWeight: 'bold', color: '#1e293b' },
-  sectionCount: { fontSize: 14, color: '#64748b' },
-
-  card: {
-    backgroundColor: '#fff',
-    marginHorizontal: 16,
-    marginVertical: 4,
-    padding: 14,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-  },
-  cardHeader: { flexDirection: 'row', alignItems: 'center' },
-  orderBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: '#1e40af',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  orderText: { color: '#fff', fontSize: 13, fontWeight: 'bold' },
-  cardInfo: { flex: 1 },
-  companyName: { fontSize: 15, fontWeight: '600', color: '#1e293b' },
-  contactPerson: { fontSize: 13, color: '#64748b' },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6 },
-  statusText: { fontSize: 11, fontWeight: '600' },
-  address: { fontSize: 12, color: '#94a3b8', marginTop: 6, marginLeft: 40 },
-  sector: { fontSize: 11, color: '#3b82f6', marginTop: 2, marginLeft: 40 },
-
-  empty: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
-  emptyText: { fontSize: 16, color: '#94a3b8' },
-  manualBtn: {
-    marginTop: 16,
-    backgroundColor: '#1e40af',
-    paddingHorizontal: 24,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  manualBtnText: { color: '#fff', fontWeight: '600' },
 });

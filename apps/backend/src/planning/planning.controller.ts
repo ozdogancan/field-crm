@@ -17,6 +17,13 @@ export class PlanningController {
     return ApiResponseHelper.success(this.planningService.getCurrentWeek());
   }
 
+  @Get('me/current')
+  async getMyCurrentPlan(@Req() req: any) {
+    const currentWeek = this.planningService.getCurrentWeek();
+    const plan = await this.planningService.findByUserWeek(req.user.id, currentWeek.year, currentWeek.week);
+    return ApiResponseHelper.success(plan);
+  }
+
   @Get()
   @Roles('admin')
   async findAll(

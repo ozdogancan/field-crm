@@ -58,6 +58,16 @@ export class PlanningService {
     return result;
   }
 
+  async findByUserWeek(userId: string, year: number, weekNumber: number) {
+    const plan = await this.prisma.weeklyRoutePlan.findFirst({
+      where: { userId, year, weekNumber },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!plan) return null;
+    return this.findOne(plan.id);
+  }
+
   async findOne(id: string) {
     const plan = await this.prisma.weeklyRoutePlan.findUnique({ where: { id } });
     if (!plan) throw new NotFoundException('Plan bulunamadi');

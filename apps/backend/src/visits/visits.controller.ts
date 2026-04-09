@@ -43,6 +43,23 @@ export class VisitsController {
     return ApiResponseHelper.success(stats);
   }
 
+  @Get('me/history')
+  async getMyHistory(
+    @Req() req: any,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('result') result?: string,
+    @Query('status') status?: string,
+  ) {
+    const data = await this.visitsService.getMyHistory(req.user.id, {
+      page: page ? parseInt(page) : undefined,
+      limit: limit ? parseInt(limit) : undefined,
+      result,
+      status,
+    });
+    return ApiResponseHelper.paginated(data.visits, data.total, data.page, data.limit);
+  }
+
   @Get()
   @Roles('admin')
   async findAll(

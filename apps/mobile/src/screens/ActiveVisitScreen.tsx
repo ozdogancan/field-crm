@@ -1,19 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import {
-  View,
   Text,
   StyleSheet,
   TouchableOpacity,
-  TextInput,
-  ActivityIndicator,
   Alert,
-  ScrollView,
+  View,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { endVisit, cancelVisit } from '../lib/api';
+import ActionButton from '../components/ui/ActionButton';
+import InfoRow from '../components/ui/InfoRow';
+import InlineAlert from '../components/ui/InlineAlert';
+import ScreenContainer from '../components/ui/ScreenContainer';
+import SectionHeader from '../components/ui/SectionHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import SurfaceCard from '../components/ui/SurfaceCard';
+import TextField from '../components/ui/TextField';
+import VisitResultCard from '../components/ui/VisitResultCard';
+import { useToast } from '../context/ToastContext';
+import { theme } from '../theme';
 
 export default function ActiveVisitScreen({ route, navigation }: any) {
   const { visitId, prospectName } = route.params;
+  const { showToast } = useToast();
   const [elapsed, setElapsed] = useState(0);
   const [selectedResult, setSelectedResult] = useState<string | null>(null);
   const [notes, setNotes] = useState('');
@@ -21,6 +30,8 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
   const [showCancel, setShowCancel] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [startTime] = useState(Date.now());
+  const [errorMessage, setErrorMessage] = useState('');
+  const [resultValidation, setResultValidation] = useState('');
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -39,11 +50,13 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
 
   const handleEnd = async () => {
     if (!selectedResult) {
-      Alert.alert('Uyarı', 'Lütfen bir ziyaret sonucu seçin');
+      setResultValidation('Ziyareti kapatmadan önce bir sonuç kartı seçin.');
       return;
     }
 
     setSubmitting(true);
+    setErrorMessage('');
+    setResultValidation('');
     try {
       const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
       const res = await endVisit(visitId, {
@@ -54,14 +67,18 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
       });
 
       if (res.success) {
+        showToast('Ziyaret kaydedildi ve günlük plana geri dönüldü.', {
+          title: 'Başarılı',
+          tone: 'success',
+        });
         Alert.alert('Başarılı', 'Ziyaret sonlandırıldı', [
-          { text: 'Tamam', onPress: () => navigation.navigate('Home') },
+          { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
         ]);
       } else {
-        Alert.alert('Hata', res.error?.message || res.message || 'Ziyaret sonlandırılamadı');
+        setErrorMessage(res.error?.message || res.message || 'Ziyaret sonlandırılamadı');
       }
     } catch (err) {
-      Alert.alert('Hata', 'Konum alınamadı');
+      setErrorMessage('Konum alınamadı');
     }
     setSubmitting(false);
   };
@@ -73,191 +90,180 @@ export default function ActiveVisitScreen({ route, navigation }: any) {
     }
 
     setSubmitting(true);
+    setErrorMessage('');
     const res = await cancelVisit(visitId, { cancelReason: cancelReason.trim() });
     if (res.success) {
+      showToast('Ziyaret iptal olarak kaydedildi.', {
+        title: 'Ziyaret iptal edildi',
+        tone: 'warning',
+      });
       Alert.alert('Bilgi', 'Ziyaret iptal edildi', [
-        { text: 'Tamam', onPress: () => navigation.navigate('Home') },
+        { text: 'Tamam', onPress: () => navigation.navigate('MainTabs', { screen: 'TodayTab' }) },
       ]);
     } else {
-      Alert.alert('Hata', res.error?.message || res.message || 'İptal edilemedi');
+      setErrorMessage(res.error?.message || res.message || 'İptal edilemedi');
     }
     setSubmitting(false);
   };
 
   const resultOptions = [
-    { key: 'positive', label: 'Yatkın', color: '#22c55e', bg: '#f0fdf4' },
-    { key: 'neutral', label: 'Nötr', color: '#eab308', bg: '#fefce8' },
-    { key: 'negative', label: 'Yatkın Değil', color: '#ef4444', bg: '#fef2f2' },
+    { key: 'positive', label: 'Yatkın', color: '#1F9D61', bg: '#EAF8F0' },
+    { key: 'neutral', label: 'Nötr', color: '#D18A12', bg: '#FFF5E1' },
+    { key: 'negative', label: 'Yatkın Değil', color: '#D64545', bg: '#FDECEC' },
   ];
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 40 }}>
-      {/* Visit Timer */}
-      <View style={styles.timerCard}>
-        <View style={styles.timerDot} />
-        <Text style={styles.timerLabel}>Ziyaret Süresi</Text>
-        <Text style={styles.timerValue}>{formatElapsed(elapsed)}</Text>
+    <ScreenContainer scroll contentStyle={styles.container}>
+      <SurfaceCard elevated style={styles.timerCard}>
+        <View style={styles.timerHeader}>
+          <Text style={styles.timerLabel}>Aktif ziyaret</Text>
+          <StatusBadge label="Konum aktif" tone="success" />
+        </View>
         <Text style={styles.timerCompany}>{prospectName}</Text>
-      </View>
+        <Text style={styles.timerValue}>{formatElapsed(elapsed)}</Text>
+        <Text style={styles.timerHelper}>Süre canlı olarak güncelleniyor.</Text>
+      </SurfaceCard>
+
+      {errorMessage ? <InlineAlert title="İşlem tamamlanamadı" message={errorMessage} tone="danger" /> : null}
 
       {showCancel ? (
-        /* Cancel Section */
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Ziyaret İptali</Text>
-          <TextInput
-            style={[styles.input, { height: 100 }]}
+        <SurfaceCard style={styles.section}>
+          <SectionHeader title="Ziyareti iptal et" subtitle="İptal sebebi zorunludur." />
+          <TextField
+            label="İptal nedeni"
+            style={styles.multilineInput}
             placeholder="İptal sebebini yazın..."
             value={cancelReason}
             onChangeText={setCancelReason}
             multiline
             textAlignVertical="top"
           />
-          <TouchableOpacity
-            style={[styles.cancelConfirmBtn, submitting && styles.disabled]}
-            onPress={handleCancel}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.cancelConfirmText}>İptal Et</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setShowCancel(false)} style={styles.backLink}>
-            <Text style={styles.backLinkText}>Geri Dön</Text>
-          </TouchableOpacity>
-        </View>
+          <View style={styles.actionStack}>
+            <ActionButton label="Ziyareti İptal Et" onPress={handleCancel} variant="danger" loading={submitting} />
+            <ActionButton label="Geri Dön" onPress={() => setShowCancel(false)} variant="secondary" />
+          </View>
+        </SurfaceCard>
       ) : (
-        /* End Visit Section */
         <>
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Ziyaret Sonucu</Text>
+          <SurfaceCard style={styles.summaryCard}>
+            <InfoRow label="Müşteri" value={prospectName} />
+            <InfoRow label="Durum" value="Konum doğrulandı, sonuç bekleniyor" muted />
+          </SurfaceCard>
+
+          <SurfaceCard style={styles.section}>
+            <SectionHeader
+              title="Ziyaret sonucu"
+              subtitle="Sahadaki sonucu tek dokunuşla seçin."
+            />
+            {resultValidation ? (
+              <InlineAlert message={resultValidation} tone="warning" />
+            ) : null}
             <View style={styles.resultOptions}>
               {resultOptions.map((opt) => (
-                <TouchableOpacity
+                <VisitResultCard
                   key={opt.key}
-                  style={[
-                    styles.resultBtn,
-                    { backgroundColor: selectedResult === opt.key ? opt.bg : '#fff', borderColor: selectedResult === opt.key ? opt.color : '#e2e8f0' },
-                  ]}
-                  onPress={() => setSelectedResult(opt.key)}
-                >
-                  <Text
-                    style={[
-                      styles.resultLabel,
-                      { color: selectedResult === opt.key ? opt.color : '#64748b' },
-                    ]}
-                  >
-                    {opt.label}
-                  </Text>
-                </TouchableOpacity>
+                  label={opt.label}
+                  description={
+                    opt.key === 'positive'
+                      ? 'İleri aksiyon fırsatı var.'
+                      : opt.key === 'neutral'
+                        ? 'Takip gerekir, karar net değil.'
+                        : 'Potansiyel düşük, kaydı net kapatın.'
+                  }
+                  accentColor={opt.color}
+                  backgroundColor={opt.bg}
+                  selected={selectedResult === opt.key}
+                  onPress={() => {
+                    setSelectedResult(opt.key);
+                    setResultValidation('');
+                  }}
+                />
               ))}
             </View>
-          </View>
+          </SurfaceCard>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Notlar (Opsiyonel)</Text>
-            <TextInput
-              style={[styles.input, { height: 80 }]}
+          <SurfaceCard style={styles.section}>
+            <SectionHeader
+              title="Ziyaret notu"
+              subtitle="Kısa, net ve ekibe faydalı bilgi bırakın."
+            />
+            <InfoRow label="Müşteri" value={prospectName} muted />
+            <TextField
+              label="Notlar"
+              style={styles.noteInput}
               placeholder="Ziyaret notlarını yazın..."
               value={notes}
               onChangeText={setNotes}
               multiline
               textAlignVertical="top"
             />
+          </SurfaceCard>
+
+          <View style={styles.footerActions}>
+            <ActionButton label="Ziyareti Sonlandır" onPress={handleEnd} variant="success" loading={submitting} />
+            <ActionButton label="Ziyareti İptal Et" onPress={() => setShowCancel(true)} variant="ghost" />
           </View>
-
-          <TouchableOpacity
-            style={[styles.endBtn, submitting && styles.disabled]}
-            onPress={handleEnd}
-            disabled={submitting}
-          >
-            {submitting ? (
-              <ActivityIndicator color="#fff" />
-            ) : (
-              <Text style={styles.endBtnText}>Ziyareti Sonlandır</Text>
-            )}
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.cancelLink}
-            onPress={() => setShowCancel(true)}
-          >
-            <Text style={styles.cancelLinkText}>Ziyareti İptal Et</Text>
-          </TouchableOpacity>
         </>
       )}
-    </ScrollView>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc' },
+  container: {
+    gap: theme.spacing.lg,
+    paddingBottom: theme.spacing['3xl'],
+  },
   timerCard: {
-    backgroundColor: '#1e40af',
-    margin: 16,
-    marginTop: 60,
-    padding: 24,
-    borderRadius: 12,
+    backgroundColor: theme.colors.primaryStrong,
+    borderColor: theme.colors.primaryStrong,
+    gap: theme.spacing.sm,
+  },
+  timerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: theme.spacing.md,
   },
-  timerDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-    backgroundColor: '#22c55e',
-    marginBottom: 8,
+  timerLabel: {
+    color: '#C7F2EE',
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.semibold,
   },
-  timerLabel: { color: '#bfdbfe', fontSize: 14 },
-  timerValue: { color: '#fff', fontSize: 40, fontWeight: 'bold', marginVertical: 4 },
-  timerCompany: { color: '#bfdbfe', fontSize: 16 },
-
-  section: { paddingHorizontal: 16, marginTop: 20 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#1e293b', marginBottom: 12 },
-
-  resultOptions: { flexDirection: 'row', gap: 8 },
-  resultBtn: {
-    flex: 1,
-    paddingVertical: 14,
-    borderRadius: 10,
-    borderWidth: 2,
-    alignItems: 'center',
+  timerCompany: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.titleSm,
+    fontWeight: theme.fontWeight.bold,
   },
-  resultLabel: { fontWeight: '600', fontSize: 14 },
-
-  input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    borderRadius: 10,
-    padding: 14,
-    fontSize: 15,
+  timerValue: {
+    color: theme.colors.surface,
+    fontSize: theme.typography.display,
+    fontWeight: theme.fontWeight.bold,
   },
-
-  endBtn: {
-    backgroundColor: '#22c55e',
-    marginHorizontal: 16,
-    marginTop: 24,
-    paddingVertical: 16,
-    borderRadius: 10,
-    alignItems: 'center',
+  timerHelper: {
+    color: '#C7F2EE',
+    fontSize: theme.typography.bodySm,
   },
-  endBtnText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-
-  cancelLink: { alignItems: 'center', marginTop: 16 },
-  cancelLinkText: { color: '#ef4444', fontSize: 15 },
-
-  cancelConfirmBtn: {
-    backgroundColor: '#ef4444',
-    paddingVertical: 16,
-    borderRadius: 10,
-    alignItems: 'center',
-    marginTop: 16,
+  section: {
+    gap: theme.spacing.lg,
   },
-  cancelConfirmText: { color: '#fff', fontSize: 16, fontWeight: 'bold' },
-
-  backLink: { alignItems: 'center', marginTop: 12 },
-  backLinkText: { color: '#64748b', fontSize: 15 },
-
-  disabled: { opacity: 0.5 },
+  summaryCard: {
+    gap: theme.spacing.md,
+  },
+  resultOptions: {
+    flexDirection: 'row',
+    gap: theme.spacing.sm,
+  },
+  noteInput: {
+    minHeight: 104,
+  },
+  multilineInput: {
+    minHeight: 120,
+  },
+  footerActions: {
+    gap: theme.spacing.md,
+  },
+  actionStack: {
+    gap: theme.spacing.md,
+  },
 });

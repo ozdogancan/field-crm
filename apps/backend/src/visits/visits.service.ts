@@ -167,6 +167,49 @@ export class VisitsService {
     return { ...visit, prospect };
   }
 
+  async getMyHistory(
+    userId: string,
+    params: {
+      page?: number;
+      limit?: number;
+      result?: string;
+      status?: string;
+    } = {},
+  ) {
+    const { page = 1, limit = 20, result, status } = params;
+    const skip = (page - 1) * limit;
+
+    const where: any = { userId };
+    if (result) where.result = result;
+    if (status) where.status = status;
+
+    const visits = await this.prisma.visit.findMany({
+      where,
+      skip,
+      take: limit,
+      orderBy: { startTime: 'desc' },
+    });
+
+    const enriched = [];
+    for (const visit of visits) {
+      const prospect = await this.prisma.prospect.findUnique({ where: { id: visit.prospectId } });
+      enriched.push({
+        ...visit,
+        prospect: prospect
+          ? {
+              id: prospect.id,
+              companyName: prospect.companyName,
+              contactPerson: prospect.contactPerson,
+              address: prospect.address,
+            }
+          : null,
+      });
+    }
+
+    const total = await this.prisma.visit.count({ where });
+    return { visits: enriched, total, page, limit };
+  }
+
   async findAll(params: {
     page?: number;
     limit?: number;

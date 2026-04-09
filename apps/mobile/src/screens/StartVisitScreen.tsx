@@ -1,17 +1,25 @@
 import React, { useState, useEffect } from 'react';
 import {
+  StyleSheet,
+  Alert,
   View,
   Text,
-  StyleSheet,
-  TouchableOpacity,
-  ActivityIndicator,
-  Alert,
 } from 'react-native';
 import * as Location from 'expo-location';
 import { startVisit } from '../lib/api';
+import ActionButton from '../components/ui/ActionButton';
+import InfoRow from '../components/ui/InfoRow';
+import InlineAlert from '../components/ui/InlineAlert';
+import ScreenContainer from '../components/ui/ScreenContainer';
+import SectionHeader from '../components/ui/SectionHeader';
+import StatusBadge from '../components/ui/StatusBadge';
+import SurfaceCard from '../components/ui/SurfaceCard';
+import { useToast } from '../context/ToastContext';
+import { theme } from '../theme';
 
 export default function StartVisitScreen({ route, navigation }: any) {
   const { prospectId, prospectName, prospectAddress, routePlanItemId } = route.params;
+  const { showToast } = useToast();
   const [location, setLocation] = useState<Location.LocationObject | null>(null);
   const [loading, setLoading] = useState(true);
   const [starting, setStarting] = useState(false);
@@ -59,6 +67,10 @@ export default function StartVisitScreen({ route, navigation }: any) {
     });
 
     if (res.success && res.data) {
+      showToast('Ziyaret kaydı açıldı. Sonuç ekranına yönlendiriliyorsunuz.', {
+        title: 'Ziyaret başladı',
+        tone: 'success',
+      });
       navigation.replace('ActiveVisit', {
         visitId: (res.data as any).id,
         prospectName,
@@ -70,96 +82,102 @@ export default function StartVisitScreen({ route, navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
-      <View style={styles.card}>
-        <Text style={styles.title}>Ziyaret Başlat</Text>
+    <ScreenContainer contentStyle={styles.container}>
+      <SurfaceCard elevated style={styles.card}>
+        <SectionHeader
+          title="Ziyaret başlat"
+          subtitle="Konum doğrulandıktan sonra ziyaret aktif hale gelir."
+        />
 
-        <View style={styles.info}>
-          <Text style={styles.label}>Müşteri</Text>
-          <Text style={styles.value}>{prospectName || 'Seçilmedi'}</Text>
-        </View>
+        <InfoRow label="Müşteri" value={prospectName || 'Seçilmedi'} />
+        {prospectAddress ? <InfoRow label="Adres" value={prospectAddress} muted /> : null}
 
-        {prospectAddress ? (
-          <View style={styles.info}>
-            <Text style={styles.label}>Adres</Text>
-            <Text style={styles.value}>{prospectAddress}</Text>
+        <View style={styles.locationPanel}>
+          <View style={styles.locationHeader}>
+            <Text style={styles.locationTitle}>GPS durumu</Text>
+            {loading ? (
+              <StatusBadge label="Konum alınıyor" tone="warning" />
+            ) : location ? (
+              <StatusBadge label="Konum hazır" tone="success" />
+            ) : (
+              <StatusBadge label="Konum yok" tone="danger" />
+            )}
           </View>
-        ) : null}
 
-        <View style={styles.info}>
-          <Text style={styles.label}>Konumunuz</Text>
-          {loading ? (
-            <ActivityIndicator size="small" color="#1e40af" />
-          ) : location ? (
-            <Text style={styles.value}>
-              {location.coords.latitude.toFixed(6)}, {location.coords.longitude.toFixed(6)}
-            </Text>
-          ) : (
-            <Text style={[styles.value, { color: '#ef4444' }]}>Konum alınamadı</Text>
-          )}
-        </View>
+          <Text style={styles.locationValue}>
+            {loading
+              ? 'Cihaz konumu hazırlanıyor...'
+              : location
+                ? `${location.coords.latitude.toFixed(6)}, ${location.coords.longitude.toFixed(6)}`
+                : 'Konum alınamadı'}
+          </Text>
 
-        <View style={styles.gpsNote}>
-          <Text style={styles.gpsNoteText}>
-            Müşteri konumuna 200m mesafede olmanız gerekmektedir.
+          <Text style={styles.locationHint}>
+            Ziyaret başlatmak için müşteri noktasına yakın olmanız gerekir. Dış mekanda GPS doğruluğunu kontrol edin.
           </Text>
         </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <InlineAlert title="Konum veya işlem hatası" message={error} tone="danger" /> : null}
 
-        <TouchableOpacity
-          style={[styles.button, (!location || starting) && styles.buttonDisabled]}
-          onPress={handleStart}
-          disabled={!location || starting}
-        >
-          {starting ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Ziyareti Başlat</Text>
-          )}
-        </TouchableOpacity>
+        {loading ? (
+          <InlineAlert
+            message="GPS doğrulaması sürüyor. Açık alanda beklemek doğruluğu artırır."
+            tone="info"
+          />
+        ) : null}
 
-        <TouchableOpacity
-          style={styles.cancelButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.cancelText}>Geri Dön</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
+        <View style={styles.actions}>
+          <ActionButton
+            label="Ziyareti Başlat"
+            onPress={handleStart}
+            variant="success"
+            disabled={!location}
+            loading={starting}
+          />
+          <ActionButton label="Geri Dön" onPress={() => navigation.goBack()} variant="secondary" />
+        </View>
+      </SurfaceCard>
+    </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#f8fafc', justifyContent: 'center', padding: 20 },
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+  },
   card: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 24,
+    gap: theme.spacing.lg,
+  },
+  locationPanel: {
+    backgroundColor: theme.colors.surfaceMuted,
+    borderColor: theme.colors.border,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderRadius: theme.radius.md,
+    padding: theme.spacing.lg,
+    gap: theme.spacing.sm,
   },
-  title: { fontSize: 22, fontWeight: 'bold', color: '#1e293b', textAlign: 'center', marginBottom: 24 },
-  info: { marginBottom: 16 },
-  label: { fontSize: 12, fontWeight: '600', color: '#64748b', marginBottom: 4 },
-  value: { fontSize: 16, color: '#1e293b' },
-  gpsNote: {
-    backgroundColor: '#eff6ff',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 16,
-  },
-  gpsNoteText: { fontSize: 13, color: '#1e40af', textAlign: 'center' },
-  error: { color: '#ef4444', fontSize: 14, textAlign: 'center', marginBottom: 12 },
-  button: {
-    backgroundColor: '#22c55e',
-    borderRadius: 10,
-    paddingVertical: 16,
+  locationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: theme.spacing.md,
   },
-  buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#fff', fontSize: 18, fontWeight: 'bold' },
-  cancelButton: { alignItems: 'center', paddingVertical: 8 },
-  cancelText: { color: '#64748b', fontSize: 15 },
+  locationTitle: {
+    fontSize: theme.typography.bodySm,
+    fontWeight: theme.fontWeight.bold,
+    color: theme.colors.text,
+  },
+  locationValue: {
+    fontSize: theme.typography.body,
+    color: theme.colors.text,
+  },
+  locationHint: {
+    fontSize: theme.typography.bodySm,
+    lineHeight: 20,
+    color: theme.colors.textMuted,
+  },
+  actions: {
+    gap: theme.spacing.md,
+  },
 });
