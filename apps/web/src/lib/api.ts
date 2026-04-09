@@ -91,6 +91,22 @@ export async function toggleProspectStatus(id: string) {
   });
 }
 
+export async function importProspects(file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const token = getToken();
+  const res = await fetch(`${API_URL}/api/v1/prospects/import`, {
+    method: "POST",
+    headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: formData,
+  });
+  return res.json();
+}
+
+export async function getImportHistory(page = 1, limit = 10) {
+  return api(`/prospects/import-history?page=${page}&limit=${limit}`, { token: getToken()! });
+}
+
 // Planning
 export async function getPlans(params: { userId?: string; year?: number; weekNumber?: number } = {}) {
   const q = new URLSearchParams();
