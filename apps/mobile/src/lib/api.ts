@@ -1,8 +1,28 @@
+import { Platform } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 
-const API_URL = __DEV__ ? 'http://10.0.2.2:3001' : 'https://your-api.com';
-// 10.0.2.2 = host machine from Android emulator
-// For iOS simulator use localhost, for physical device use your local IP
+// Physical device: use your machine's local IP
+// Android emulator: use 10.0.2.2
+// iOS simulator / Web: use localhost
+const API_URL = __DEV__
+  ? Platform.OS === 'web' ? 'http://localhost:3001' : 'http://10.0.0.210:3001'
+  : 'https://your-api.com';
+
+// Web fallback for SecureStore (uses localStorage)
+const storage = {
+  getItem: async (key: string): Promise<string | null> => {
+    if (Platform.OS === 'web') return localStorage.getItem(key);
+    return SecureStore.getItemAsync(key);
+  },
+  setItem: async (key: string, value: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.setItem(key, value); return; }
+    await SecureStore.setItemAsync(key, value);
+  },
+  deleteItem: async (key: string): Promise<void> => {
+    if (Platform.OS === 'web') { localStorage.removeItem(key); return; }
+    await SecureStore.deleteItemAsync(key);
+  },
+};
 
 interface FetchOptions extends RequestInit {
   token?: string;
@@ -30,26 +50,26 @@ export async function api<T = any>(
 }
 
 export async function getToken(): Promise<string | null> {
-  return SecureStore.getItemAsync('accessToken');
+  return storage.getItem('accessToken');
 }
 
 export async function setToken(token: string): Promise<void> {
-  await SecureStore.setItemAsync('accessToken', token);
+  await storage.setItem('accessToken', token);
 }
 
 export async function setUser(user: any): Promise<void> {
-  await SecureStore.setItemAsync('user', JSON.stringify(user));
+  await storage.setItem('user', JSON.stringify(user));
 }
 
 export async function getUser(): Promise<any | null> {
-  const user = await SecureStore.getItemAsync('user');
+  const user = await storage.getItem('user');
   return user ? JSON.parse(user) : null;
 }
 
 export async function clearAuth(): Promise<void> {
-  await SecureStore.deleteItemAsync('accessToken');
-  await SecureStore.deleteItemAsync('refreshToken');
-  await SecureStore.deleteItemAsync('user');
+  await storage.deleteItem('accessToken');
+  await storage.deleteItem('refreshToken');
+  await storage.deleteItem('user');
 }
 
 // Auth
