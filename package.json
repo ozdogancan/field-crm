@@ -1,0 +1,15 @@
+{
+  "name": "field-crm",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "backend:dev": "npm run dev -w apps/backend",
+    "web:dev": "npm run dev -w apps/web",
+    "backend:build": "npm run build -w apps/backend",
+    "web:build": "npm run build -w apps/web"
+  }
+}

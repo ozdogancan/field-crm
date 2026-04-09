@@ -36,6 +36,7 @@ yarn-error.log*
 
 # Prisma
 prisma/*.db
+generated/
 
 # Coverage
 coverage/
