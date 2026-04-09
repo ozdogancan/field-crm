@@ -238,18 +238,15 @@ enum EmailDispatchStatus {
 }
 
 model EmailDispatchLog {
-  id             String              @id @default(uuid())
-  dispatchDate   DateTime            @map("dispatch_date") @db.Date
-  recipientEmail String              @map("recipient_email")
-  subject        String
-  contentSummary Json                @map("content_summary")
-  status         EmailDispatchStatus @default(retrying)
-  retryCount     Int                 @default(0) @map("retry_count")
-  errorMessage   String?             @map("error_message")
-  sentAt         DateTime?           @map("sent_at")
-  createdAt      DateTime            @default(now()) @map("created_at")
+  id         String              @id @default(uuid())
+  type       String
+  recipients String
+  subject    String
+  body       String?
+  status     EmailDispatchStatus @default(retrying)
+  sentAt     DateTime?           @map("sent_at")
+  createdAt  DateTime            @default(now()) @map("created_at")
 
-  @@index([dispatchDate])
   @@index([status])
   @@map("email_dispatch_logs")
 }

@@ -17,9 +17,12 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
     } else {
       const { PrismaClient } = await import('../../generated/prisma/client');
       const { PrismaPg } = await import('@prisma/adapter-pg');
-      const adapter = new PrismaPg(process.env.DATABASE_URL!);
+      const dbUrl = process.env.DIRECT_URL || process.env.DATABASE_URL!;
+      console.log('🔗 Connecting to Supabase PostgreSQL...');
+      const adapter = new PrismaPg(dbUrl);
       this.realClient = new PrismaClient({ adapter });
       await this.realClient.$connect();
+      console.log('✅ Database connected successfully');
     }
   }
 
