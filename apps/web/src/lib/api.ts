@@ -10,16 +10,50 @@ export async function api<T = any>(
 ): Promise<{ success: boolean; data?: T; error?: any; meta?: any; message?: string }> {
   const { token, headers, ...rest } = options;
 
-  const res = await fetch(`${API_URL}/api/v1${endpoint}`, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...headers,
-    },
-    ...rest,
-  });
+  try {
+    const res = await fetch(`${API_URL}/api/v1${endpoint}`, {
+      headers: {
+        "Content-Type": "application/json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...headers,
+      },
+      ...rest,
+    });
 
-  return res.json();
+    // Auto-logout on expired/invalid token (skip for /auth/login itself)
+    if (res.status === 401 && typeof window !== "undefined" && !endpoint.startsWith("/auth/login")) {
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      localStorage.removeItem("user");
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+      return { success: false, error: { message: "Oturum süresi doldu" }, message: "Unauthorized" };
+    }
+
+    let payload: any = null;
+    try {
+      payload = await res.json();
+    } catch {
+      payload = null;
+    }
+
+    if (!res.ok && !payload) {
+      return {
+        success: false,
+        error: { message: `Sunucu hatası (${res.status})` },
+        message: "HTTP_ERROR",
+      };
+    }
+
+    return payload ?? { success: false, error: { message: "Boş yanıt" }, message: "EMPTY" };
+  } catch (err: any) {
+    return {
+      success: false,
+      error: { message: err?.message || "Bağlantı hatası. API erişilemiyor." },
+      message: "NETWORK_ERROR",
+    };
+  }
 }
 
 export function getToken(): string | null {
