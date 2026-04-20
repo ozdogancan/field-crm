@@ -47,7 +47,7 @@ export class PrismaService implements OnModuleInit, OnModuleDestroy {
 // ============================================
 // IN-MEMORY MOCK DATABASE
 // ============================================
-import { v4 as uuidv4 } from 'uuid';
+import { randomUUID as uuidv4 } from 'crypto';
 
 type WhereFilter = Record<string, any>;
 
